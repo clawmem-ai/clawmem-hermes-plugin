@@ -1208,4 +1208,5 @@ def _parse_extraction_response(raw: str) -> list[dict]:
 
 def register(ctx) -> None:
     """Register ClawMem as a memory provider plugin."""
-    ctx.register_memory_provider(ClawMemProvider())
+    if hasattr(ctx, "register_memory_provider"):
+        ctx.register_memory_provider(ClawMemProvider())

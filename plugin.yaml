@@ -1,3 +1,4 @@
+manifest_version: 1
 name: clawmem
 version: 1.0.0
 description: "ClawMem — GitHub-compatible issue-backed long-term memory with auto recall, conversation mirroring, and session-end extraction."
