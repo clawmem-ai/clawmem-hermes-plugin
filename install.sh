@@ -196,10 +196,13 @@ bootstrap_agent() {
 
   local api_url="${git_url%/}/api/v3/agents"
   local response
+  local http_code
 
   info "registering agent identity at $api_url"
+
+  # Use --write-out to capture HTTP status code separately
   response="$(
-    curl -fsSL \
+    curl -sS \
       --connect-timeout 5 \
       --max-time 20 \
       --retry 2 \
@@ -209,8 +212,23 @@ bootstrap_agent() {
       -H "Accept: application/vnd.github+json" \
       -H "Content-Type: application/json" \
       -d "{\"prefix_login\":\"$prefix_login\",\"default_repo_name\":\"$repo_name\"}" \
+      -w '\n%{http_code}' \
       "$api_url"
-  )"
+  )" || fail "curl request to $api_url failed (network error or DNS resolution failure)"
+
+  # Split response body and HTTP status code
+  http_code="$(printf '%s' "$response" | tail -1)"
+  response="$(printf '%s' "$response" | sed '$d')"
+
+  if [ -z "$response" ]; then
+    fail "agent registration returned an empty response (HTTP $http_code) — check $api_url"
+  fi
+
+  # Check for non-2xx status
+  case "$http_code" in
+    2*) ;;
+    *) fail "agent registration failed: HTTP $http_code — $response" ;;
+  esac
 
   printf '%s' "$response"
 }
@@ -220,9 +238,14 @@ parse_json_field() {
   local field="$2"
   local python_bin="$3"
 
+  [ -n "$json_str" ] || return 0
+
   "$python_bin" -c "
 import json, sys
-data = json.loads(sys.argv[1])
+try:
+    data = json.loads(sys.argv[1])
+except (json.JSONDecodeError, ValueError):
+    sys.exit(0)
 val = data.get(sys.argv[2], '')
 if val:
     print(val)
@@ -448,15 +471,20 @@ if [ -n "$existing_token" ] && [ -n "$existing_login" ] && [ -n "$existing_repo"
 else
   # Auto-bootstrap: register a new agent identity (no API key needed!)
   prefix_login="$(derive_prefix_login)"
-  bootstrap_response="$(bootstrap_agent "$CLAWMEM_GIT_BASE_URL" "$prefix_login" "$DEFAULT_REPO_NAME")"
+  bootstrap_response="$(bootstrap_agent "$CLAWMEM_GIT_BASE_URL" "$prefix_login" "$DEFAULT_REPO_NAME")" \
+    || fail "agent registration request failed — check connectivity to $CLAWMEM_GIT_BASE_URL"
+
+  if [ -z "$bootstrap_response" ]; then
+    fail "agent registration returned an empty response — check $CLAWMEM_GIT_BASE_URL/api/v3/agents"
+  fi
 
   login="$(parse_json_field "$bootstrap_response" "login" "$hermes_python")"
   token="$(parse_json_field "$bootstrap_response" "token" "$hermes_python")"
   default_repo="$(parse_json_field "$bootstrap_response" "repo_full_name" "$hermes_python")"
 
-  [ -n "$login" ] || fail "server did not return a login"
-  [ -n "$token" ] || fail "server did not return a token"
-  [ -n "$default_repo" ] || fail "server did not return a repo_full_name"
+  [ -n "$login" ] || fail "server did not return a login — response: $bootstrap_response"
+  [ -n "$token" ] || fail "server did not return a token — response: $bootstrap_response"
+  [ -n "$default_repo" ] || fail "server did not return a repo_full_name — response: $bootstrap_response"
 
   existing_token="$token"
   token_is_new=1
