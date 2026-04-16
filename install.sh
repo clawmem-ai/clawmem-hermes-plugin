@@ -198,7 +198,7 @@ bootstrap_agent() {
   local response
   local http_code
 
-  info "registering agent identity at $api_url"
+  printf -- '-> registering agent identity at %s\n' "$api_url" >&2
 
   # Use --write-out to capture HTTP status code separately
   response="$(
