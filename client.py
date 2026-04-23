@@ -488,3 +488,457 @@ class ClawMemClient:
         unmanaged = [lbl for lbl in current if not is_managed(lbl)]
         merged = list(dict.fromkeys(unmanaged + desired))  # dedupe, preserve order
         await self.update_issue(issue_number, labels=merged)
+
+    async def list_labels(
+        self,
+        *,
+        page: int = 1,
+        per_page: int = 100,
+    ) -> list[dict]:
+        """``GET /repos/{repo}/labels``"""
+        result = await self._request(
+            "GET",
+            self._repo_path(f"labels?page={page}&per_page={per_page}"),
+        )
+        return result if isinstance(result, list) else []
+
+    # -- Comments list ------------------------------------------------------
+
+    async def list_comments(
+        self,
+        issue_number: int,
+        *,
+        page: int = 1,
+        per_page: int = 100,
+        sort: str | None = None,
+        direction: str | None = None,
+        since: str | None = None,
+        threaded: bool | None = None,
+    ) -> list[dict]:
+        """``GET /repos/{repo}/issues/{n}/comments``"""
+        from urllib.parse import urlencode
+        params: dict[str, Any] = {"page": page, "per_page": per_page}
+        if sort:
+            params["sort"] = sort
+        if direction:
+            params["direction"] = direction
+        if since:
+            params["since"] = since
+        if threaded:
+            params["threaded"] = "true"
+        result = await self._request(
+            "GET",
+            self._repo_path(f"issues/{issue_number}/comments?{urlencode(params)}"),
+        )
+        return result if isinstance(result, list) else []
+
+    # -- Repos --------------------------------------------------------------
+
+    async def list_user_repos(self) -> list[dict]:
+        """``GET /user/repos``"""
+        result = await self._request("GET", "user/repos")
+        return result if isinstance(result, list) else []
+
+    async def create_user_repo(
+        self,
+        name: str,
+        *,
+        description: str | None = None,
+        private: bool = True,
+        auto_init: bool = False,
+    ) -> dict:
+        """``POST /user/repos``"""
+        body: dict[str, Any] = {
+            "name": name,
+            "private": private,
+            "auto_init": auto_init,
+        }
+        if description:
+            body["description"] = description
+        return await self._request("POST", "user/repos", body=body)
+
+    async def create_org_repo(
+        self,
+        org: str,
+        name: str,
+        *,
+        description: str | None = None,
+        private: bool = True,
+        auto_init: bool = False,
+        has_issues: bool | None = None,
+        has_wiki: bool | None = None,
+    ) -> dict:
+        """``POST /orgs/{org}/repos``"""
+        body: dict[str, Any] = {
+            "name": name,
+            "private": private,
+            "auto_init": auto_init,
+        }
+        if description:
+            body["description"] = description
+        if has_issues is not None:
+            body["has_issues"] = has_issues
+        if has_wiki is not None:
+            body["has_wiki"] = has_wiki
+        return await self._request(
+            "POST",
+            f"orgs/{quote(org, safe='')}/repos",
+            body=body,
+        )
+
+    async def get_repo(self, owner: str, repo: str) -> dict | None:
+        """``GET /repos/{owner}/{repo}``"""
+        return await self._request(
+            "GET",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}",
+            allow_not_found=True,
+        )
+
+    async def transfer_repo(
+        self,
+        owner: str,
+        repo: str,
+        new_owner: str,
+        new_repo_name: str | None = None,
+    ) -> dict:
+        """``POST /repos/{owner}/{repo}/transfer``"""
+        body: dict[str, Any] = {"new_owner": new_owner}
+        if new_repo_name:
+            body["new_repo_name"] = new_repo_name
+        return await self._request(
+            "POST",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}/transfer",
+            body=body,
+        )
+
+    async def rename_repo(self, owner: str, repo: str, new_name: str) -> dict:
+        """``PATCH /repos/{owner}/{repo}``"""
+        return await self._request(
+            "PATCH",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}",
+            body={"name": new_name},
+        )
+
+    # -- User / Orgs --------------------------------------------------------
+
+    async def get_current_user(self) -> dict:
+        """``GET /user``"""
+        return await self._request("GET", "user")
+
+    async def list_user_orgs(self) -> list[dict]:
+        """``GET /user/orgs``"""
+        result = await self._request("GET", "user/orgs")
+        return result if isinstance(result, list) else []
+
+    async def create_user_org(
+        self,
+        login: str,
+        *,
+        name: str | None = None,
+        default_repository_permission: str | None = None,
+    ) -> dict:
+        """``POST /user/orgs``"""
+        body: dict[str, Any] = {"login": login}
+        if name:
+            body["name"] = name
+        if default_repository_permission:
+            body["default_repository_permission"] = default_repository_permission
+        return await self._request("POST", "user/orgs", body=body)
+
+    async def get_org(self, org: str) -> dict:
+        """``GET /orgs/{org}``"""
+        return await self._request("GET", f"orgs/{quote(org, safe='')}")
+
+    async def list_org_members(
+        self, org: str, role: str | None = None,
+    ) -> list[dict]:
+        """``GET /orgs/{org}/members``"""
+        path = f"orgs/{quote(org, safe='')}/members"
+        if role:
+            path += f"?role={role}"
+        result = await self._request("GET", path)
+        return result if isinstance(result, list) else []
+
+    async def get_org_membership(self, org: str, username: str) -> dict | None:
+        """``GET /orgs/{org}/memberships/{username}``"""
+        return await self._request(
+            "GET",
+            f"orgs/{quote(org, safe='')}/memberships/{quote(username, safe='')}",
+            allow_not_found=True,
+        )
+
+    async def remove_org_member(self, org: str, username: str) -> None:
+        """``DELETE /orgs/{org}/members/{username}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/members/{quote(username, safe='')}",
+        )
+
+    async def remove_org_membership(self, org: str, username: str) -> None:
+        """``DELETE /orgs/{org}/memberships/{username}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/memberships/{quote(username, safe='')}",
+        )
+
+    async def list_org_outside_collaborators(self, org: str) -> list[dict]:
+        """``GET /orgs/{org}/outside_collaborators``"""
+        result = await self._request(
+            "GET",
+            f"orgs/{quote(org, safe='')}/outside_collaborators",
+        )
+        return result if isinstance(result, list) else []
+
+    # -- Teams --------------------------------------------------------------
+
+    async def list_org_teams(self, org: str) -> list[dict]:
+        """``GET /orgs/{org}/teams``"""
+        result = await self._request("GET", f"orgs/{quote(org, safe='')}/teams")
+        return result if isinstance(result, list) else []
+
+    async def get_team(self, org: str, team_slug: str) -> dict:
+        """``GET /orgs/{org}/teams/{team_slug}``"""
+        return await self._request(
+            "GET",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}",
+        )
+
+    async def create_org_team(
+        self,
+        org: str,
+        name: str,
+        *,
+        description: str | None = None,
+        privacy: str = "closed",
+    ) -> dict:
+        """``POST /orgs/{org}/teams``"""
+        body: dict[str, Any] = {"name": name, "privacy": privacy}
+        if description:
+            body["description"] = description
+        return await self._request(
+            "POST",
+            f"orgs/{quote(org, safe='')}/teams",
+            body=body,
+        )
+
+    async def update_team(
+        self,
+        org: str,
+        team_slug: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        privacy: str | None = None,
+    ) -> dict:
+        """``PATCH /orgs/{org}/teams/{team_slug}``"""
+        body: dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if description:
+            body["description"] = description
+        if privacy:
+            body["privacy"] = privacy
+        return await self._request(
+            "PATCH",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}",
+            body=body,
+        )
+
+    async def delete_team(self, org: str, team_slug: str) -> None:
+        """``DELETE /orgs/{org}/teams/{team_slug}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}",
+        )
+
+    async def list_team_members(self, org: str, team_slug: str) -> list[dict]:
+        """``GET /orgs/{org}/teams/{team_slug}/members``"""
+        result = await self._request(
+            "GET",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}/members",
+        )
+        return result if isinstance(result, list) else []
+
+    async def set_team_membership(
+        self,
+        org: str,
+        team_slug: str,
+        username: str,
+        role: str,
+    ) -> dict:
+        """``PUT /orgs/{org}/teams/{team_slug}/memberships/{username}``"""
+        return await self._request(
+            "PUT",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}"
+            f"/memberships/{quote(username, safe='')}",
+            body={"role": role},
+        )
+
+    async def remove_team_membership(
+        self, org: str, team_slug: str, username: str,
+    ) -> None:
+        """``DELETE /orgs/{org}/teams/{team_slug}/memberships/{username}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}"
+            f"/memberships/{quote(username, safe='')}",
+        )
+
+    async def list_team_repos(self, org: str, team_slug: str) -> list[dict]:
+        """``GET /orgs/{org}/teams/{team_slug}/repos``"""
+        result = await self._request(
+            "GET",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}/repos",
+        )
+        return result if isinstance(result, list) else []
+
+    async def set_team_repo_access(
+        self,
+        org: str,
+        team_slug: str,
+        owner: str,
+        repo: str,
+        permission: str,
+    ) -> None:
+        """``PUT /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}``"""
+        await self._request(
+            "PUT",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}"
+            f"/repos/{quote(owner, safe='')}/{quote(repo, safe='')}",
+            body={"permission": permission},
+        )
+
+    async def remove_team_repo_access(
+        self, org: str, team_slug: str, owner: str, repo: str,
+    ) -> None:
+        """``DELETE /orgs/{org}/teams/{team_slug}/repos/{owner}/{repo}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/teams/{quote(team_slug, safe='')}"
+            f"/repos/{quote(owner, safe='')}/{quote(repo, safe='')}",
+        )
+
+    # -- Repo collaborators -------------------------------------------------
+
+    async def list_repo_collaborators(
+        self, owner: str, repo: str,
+    ) -> list[dict]:
+        """``GET /repos/{owner}/{repo}/collaborators``"""
+        result = await self._request(
+            "GET",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}/collaborators",
+        )
+        return result if isinstance(result, list) else []
+
+    async def list_repo_invitations(
+        self, owner: str, repo: str,
+    ) -> list[dict]:
+        """``GET /repos/{owner}/{repo}/invitations``"""
+        result = await self._request(
+            "GET",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}/invitations",
+        )
+        return result if isinstance(result, list) else []
+
+    async def set_repo_collaborator(
+        self,
+        owner: str,
+        repo: str,
+        username: str,
+        permission: str,
+    ) -> dict | None:
+        """``PUT /repos/{owner}/{repo}/collaborators/{username}``"""
+        return await self._request(
+            "PUT",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}"
+            f"/collaborators/{quote(username, safe='')}",
+            body={"permission": permission},
+        )
+
+    async def remove_repo_collaborator(
+        self, owner: str, repo: str, username: str,
+    ) -> None:
+        """``DELETE /repos/{owner}/{repo}/collaborators/{username}``"""
+        await self._request(
+            "DELETE",
+            f"repos/{quote(owner, safe='')}/{quote(repo, safe='')}"
+            f"/collaborators/{quote(username, safe='')}",
+        )
+
+    # -- User invitations (self-side) ---------------------------------------
+
+    async def list_user_repo_invitations(self) -> list[dict]:
+        """``GET /user/repository_invitations``"""
+        result = await self._request("GET", "user/repository_invitations")
+        return result if isinstance(result, list) else []
+
+    async def accept_user_repo_invitation(self, invitation_id: int) -> None:
+        """``PATCH /user/repository_invitations/{id}``"""
+        await self._request(
+            "PATCH", f"user/repository_invitations/{invitation_id}",
+        )
+
+    async def decline_user_repo_invitation(self, invitation_id: int) -> None:
+        """``DELETE /user/repository_invitations/{id}``"""
+        await self._request(
+            "DELETE", f"user/repository_invitations/{invitation_id}",
+        )
+
+    async def list_user_org_invitations(self) -> list[dict]:
+        """``GET /user/organization_invitations``"""
+        result = await self._request("GET", "user/organization_invitations")
+        return result if isinstance(result, list) else []
+
+    async def accept_user_org_invitation(self, invitation_id: int) -> None:
+        """``PATCH /user/organization_invitations/{id}``"""
+        await self._request(
+            "PATCH", f"user/organization_invitations/{invitation_id}",
+        )
+
+    async def decline_user_org_invitation(self, invitation_id: int) -> None:
+        """``DELETE /user/organization_invitations/{id}``"""
+        await self._request(
+            "DELETE", f"user/organization_invitations/{invitation_id}",
+        )
+
+    # -- Org invitations (admin-side) ---------------------------------------
+
+    async def list_org_invitations(self, org: str) -> list[dict]:
+        """``GET /orgs/{org}/invitations``"""
+        result = await self._request(
+            "GET", f"orgs/{quote(org, safe='')}/invitations",
+        )
+        return result if isinstance(result, list) else []
+
+    async def create_org_invitation(
+        self,
+        org: str,
+        invitee_login: str,
+        *,
+        role: str = "member",
+        team_ids: list[int] | None = None,
+        expires_in_days: int | None = None,
+    ) -> dict:
+        """``POST /orgs/{org}/invitations``"""
+        body: dict[str, Any] = {
+            "invitee_login": invitee_login,
+            "role": role,
+        }
+        if team_ids:
+            body["team_ids"] = team_ids
+        if expires_in_days is not None:
+            body["expires_in_days"] = expires_in_days
+        return await self._request(
+            "POST",
+            f"orgs/{quote(org, safe='')}/invitations",
+            body=body,
+        )
+
+    async def revoke_org_invitation(
+        self, org: str, invitation_id: int,
+    ) -> None:
+        """``DELETE /orgs/{org}/invitations/{id}``"""
+        await self._request(
+            "DELETE",
+            f"orgs/{quote(org, safe='')}/invitations/{invitation_id}",
+        )
