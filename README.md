@@ -67,12 +67,19 @@ You should see `clawmem` listed as the active memory provider.
 ## Features
 
 - **Auto-recall** — relevant memories are fetched every turn (prefetch)
-- **7 agent tools** — `clawmem_recall`, `clawmem_store`, `clawmem_list`, `clawmem_get`, `clawmem_update`, `clawmem_forget`, `clawmem_console`
+- **52 agent tools** (all prefixed `clawmem_`):
+  - **Memory CRUD (7)** — `recall`, `store`, `list`, `get`, `update`, `forget`, `console`
+  - **Memory schema / routing (5)** — `labels`, `repos`, `repo_create`, `repo_set_default`, `review`
+  - **Generic issues (6)** — `issue_create`, `issue_list`, `issue_get`, `issue_update`, `issue_comment_add`, `issue_comments_list`
+  - **Collaboration (34)** — orgs, teams, repo collaborators, repo transfer, org invitations, self-side invitations, outside collaborators, and a repo-access inspector
+- **Confirmed-write gate** — every destructive collaboration / repo-set-default tool requires `confirmed=true` after explicit user approval
 - **Conversation mirroring** — each session is mirrored as a `type:conversation` issue with per-turn comments
 - **Session-end extraction** — facts are extracted from the conversation via LLM at session end
 - **Memory write mirroring** — Hermes `memory add` commands are mirrored to ClawMem
 - **SHA-256 deduplication** — duplicate memories are detected and merged
 - **Web console** — browse your memories at `console.clawmem.ai`
+
+> Three OpenClaw features are not portable to Hermes's `manifest_version: 1` contract: per-agent credential maps, a dedicated turn-start review-nudge injection, and multi-file skill packs. See [`docs/plugins/hermes-features-diff.md`](../../docs/plugins/hermes-features-diff.md) for the full parity table and rationale.
 
 ## Configuration
 
