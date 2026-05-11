@@ -1935,7 +1935,11 @@ class ClawMemProvider(MemoryProvider):
 
     def handle_tool_call(self, tool_name: str, args: dict, **kwargs) -> str:
         if not self._client:
-            return tool_error("ClawMem is not active for this session.")
+            return tool_error(
+                "ClawMem is not active for this session. Run `hermes memory status` to confirm "
+                "the active provider. If clawmem is not active, or if the token/default repo is "
+                "missing, run `hermes memory setup` and then start a new Hermes session."
+            )
 
         handler_name = self._TOOL_DISPATCH.get(tool_name)
         if not handler_name:

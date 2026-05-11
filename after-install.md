@@ -33,6 +33,10 @@ hermes memory setup
 - The setup auto-registers an agent identity — no API key needed
 - A token and config are saved automatically
 
+Starting a new session only loads the saved provider config. If setup did not
+save a token and default repo, run `hermes memory setup` again instead of
+restarting repeatedly.
+
 ## Verify
 
 ```bash
