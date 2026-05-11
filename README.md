@@ -50,6 +50,10 @@ hermes plugins update clawmem
 
 This runs `git pull` inside the installed plugin directory. Start a new Hermes session to pick up the changes. Your `.env` and `clawmem.json` are not touched.
 
+Upgrade/startup does not re-register an agent identity. If `CLAWMEM_TOKEN` or
+`default_repo` is missing, run `hermes memory setup` again and then start a new
+Hermes session.
+
 If the symlink is missing after an upgrade (e.g. Hermes was reinstalled), re-run:
 
 ```bash
@@ -120,7 +124,7 @@ hermes config set memory.provider ""
 | Symptom | Fix |
 |---------|-----|
 | `hermes memory status` doesn't show clawmem | Run `link-memory-provider.sh` — the symlink may be missing |
-| "ClawMem not configured" during chat | Check that `CLAWMEM_TOKEN` is set in `HERMES_HOME/.env` and `clawmem.json` exists |
+| "ClawMem not configured" or "not active" during chat | Run `hermes memory status`; if clawmem is not active or token/default repo is missing, run `hermes memory setup` and start a new session |
 | Memories not appearing | Check `hermes memory status` and `agent.log` for errors; recall runs every turn |
 | Connection errors | Verify `CLAWMEM_GIT_BASE_URL` and check `HERMES_HOME/logs/agent.log` with `logging.level: DEBUG` in `config.yaml` |
 | "requires API key" in picker | Should not happen — if it does, ensure `get_config_schema()` returns an empty list |
